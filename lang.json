@@ -1,0 +1,45 @@
+
+{
+    "en": {
+      "select_file": "Select WAV File",
+      "browse": "Browse",
+      "gain_label": "Additional Gain (dB)",
+      "eq": "Enable Basic EQ",
+      "width": "Stereo Width",
+      "saturation": "Saturation",
+      "start": "Start Mastering",
+      "save": "Save Mastered",
+      "preview": "Preview",
+      "original": "Original",
+      "mastered": "Mastered",
+      "language": "Language:",
+      "processing": "Processing...",
+      "mastering_complete": "Mastering Complete!",
+      "no_audio": "No mastered audio to save.",
+      "gain_error": "Gain must be a number.",
+      "saved_loudness": "Saved! Loudness: Before {before} dB | After {after} dB",
+      "auto_gain": "Auto Gain",
+      "gain_recommended": "Recommended gain applied! Current: {current} dB, Target: {target} dB"
+    },
+    "id": {
+      "select_file": "Pilih File WAV",
+      "browse": "Telusuri",
+      "gain_label": "Gain Tambahan (dB)",
+      "eq": "EQ Dasar",
+      "width": "Stereo Width",
+      "saturation": "Saturasi",
+      "start": "Proses Mastering",
+      "save": "Simpan Hasil",
+      "preview": "Pratinjau",
+      "original": "Original",
+      "mastered": "Mastered",
+      "language": "Bahasa:",
+      "processing": "Memproses...",
+      "mastering_complete": "Mastering selesai!",
+      "no_audio": "Tidak ada audio yang bisa disimpan.",
+      "gain_error": "Gain harus berupa angka.",
+      "saved_loudness": "Tersimpan! Kekerasan suara: Sebelum {before} dB | Sesudah {after} dB",
+      "auto_gain": "Rekomendasi Gain",
+      "gain_recommended": "Gain disarankan telah diterapkan! Saat ini: {current} dB, Target: {target} dB"
+    }
+  }

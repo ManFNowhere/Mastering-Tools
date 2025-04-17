@@ -2,9 +2,8 @@ import tkinter as tk
 import sounddevice as sd
 import soundfile as sf
 import threading
-import time
 import io
-
+from scripts.waveform_canvas import WaveformCanvas
 
 class EmbeddedPlayer:
     def __init__(self, container, audiosegment, title):
@@ -21,6 +20,9 @@ class EmbeddedPlayer:
         tk.Label(container, text=title, font=("Helvetica", 12, "bold")).pack()
         self.slider = tk.Scale(container, from_=0, to=self.total_duration, orient="horizontal", length=400, resolution=0.1, command=self.slider_seek)
         self.slider.pack(pady=2)
+
+        # Waveform canvas
+        self.waveform = WaveformCanvas(container, audiosegment)
 
         # Bind mouse events
         self.slider.bind("<ButtonPress-1>", self.on_slider_press)
@@ -43,10 +45,14 @@ class EmbeddedPlayer:
     def on_slider_release(self, event):
         self.current_position = float(self.slider.get())
         self.seek_flag.clear()
+        if hasattr(self, 'waveform'):
+            self.waveform.update_seek_bar(self.current_position / self.total_duration)
 
     def slider_seek(self, value):
         if self.seek_flag.is_set():
             self.current_position = float(value)
+            if hasattr(self, 'waveform'):
+                self.waveform.update_seek_bar(self.current_position / self.total_duration)
 
     def play(self):
         if self.play_thread and self.play_thread.is_alive():
@@ -75,8 +81,12 @@ class EmbeddedPlayer:
     def stop(self):
         self.stop_flag.set()
         sd.stop()
+        if hasattr(self, 'waveform'):
+            self.waveform.reset_seek_bar()
 
     def update_slider(self):
         if not self.stop_flag.is_set() and not self.seek_flag.is_set():
             self.slider.set(self.current_position)
-        self.container.after(200, self.update_slider)
+            if hasattr(self, 'waveform'):
+                self.waveform.update_seek_bar(self.current_position / self.total_duration)
+        self.container.after(100, self.update_slider)
