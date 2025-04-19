@@ -12,12 +12,12 @@ from pydub import AudioSegment
 from PIL import Image, ImageDraw
 from PIL.ImageQt import ImageQt
 from scripts.utils import format_time
-
 class AudioPlayerWidget(QWidget):
     def __init__(self, audiosegment: AudioSegment, title="", parent=None):
         super().__init__(parent)
         self.audiosegment = audiosegment
         self.title = title
+        self.stream = None  # ✅ Prevent crash when stop() is called before play()
         self.data, self.fs = self._convert_audio(audiosegment)
         self.position = 0
         self.playing = False
@@ -82,8 +82,8 @@ class AudioPlayerWidget(QWidget):
         for x, (l, r) in enumerate(zip(left_samples, right_samples)):
             lh = int(l * (height // 2 - 1))
             rh = int(r * (height // 2 - 1))
-            draw.line([(x, mid), (x, mid - lh)], fill=(0, 128, 255))  # blue left
-            draw.line([(x, mid), (x, mid + rh)], fill=(255, 0, 128))  # pink right
+            draw.line([(x, mid), (x, mid - lh)], fill=(0, 128, 255))
+            draw.line([(x, mid), (x, mid + rh)], fill=(255, 0, 128))
 
         return QPixmap.fromImage(ImageQt(img))
 
@@ -96,11 +96,27 @@ class AudioPlayerWidget(QWidget):
         self.timer.start(100)
 
     def pause(self):
-        if hasattr(self, 'stream'):
-            self.stream.stop()
-            self.stream.close()
+        if self.stream is not None:
+            try:
+                self.stream.stop()
+                self.stream.close()
+                self.stream = None
+            except Exception as e:
+                print(f"⚠️ Error closing stream: {e}")
         self.playing = False
         self.timer.stop()
+
+    def stop(self):
+        if self.stream is not None:
+            print("🛑 Stopping audio stream...")
+            try:
+                self.stream.stop()
+                self.stream.close()
+                self.stream = None
+            except Exception as e:
+                print(f"⚠️ Error closing stream in stop(): {e}")
+        self.timer.stop()
+        self.playing = False
 
     def _callback(self, outdata, frames, time, status):
         if status:

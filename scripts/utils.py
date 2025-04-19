@@ -21,25 +21,29 @@ def analyze_loudness(data, sample_rate=44100):
 
     return meter.integrated_loudness(data)
 
-
 def analyze_peak_rms(data):
     """
     Calculates peak and RMS (Root Mean Square) of the audio signal.
     Returns values in dBFS.
     """
-    if data.dtype != np.float32:
-        data = data.astype(np.float32)
+    # Pastikan float32
+    data = data.astype(np.float32)
+
+    # Pastikan stereo
     if data.ndim == 1:
         data = np.stack([data, data], axis=1)
 
-    # If the data appears to be in int16 range, scale it
+    # Deteksi apakah data masih dalam skala int16 atau int32 dan normalisasi
     if np.max(np.abs(data)) > 1.5:
-        data = data / 32768.0
+        print("🔧 Detected int audio, normalizing to float [-1, 1]...")
+        data = data / 32768.0  # Untuk int16
 
+    # Hitung Peak dan RMS dalam dBFS
     peak = np.max(np.abs(data))
     rms = np.sqrt(np.mean(data**2))
-    peak_db = 20 * np.log10(peak + 1e-9)
-    rms_db = 20 * np.log10(rms + 1e-9)
+
+    peak_db = 20 * np.log10(peak + 1e-12)
+    rms_db = 20 * np.log10(rms + 1e-12)
     return peak_db, rms_db
 
 

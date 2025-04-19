@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QWidget, QPushButton, QLabel, QLineEdit, QVBoxLayout, QHBoxLayout,
-    QCheckBox, QProgressBar, QFileDialog, QComboBox
+    QCheckBox, QProgressBar, QFileDialog, QComboBox, QMessageBox
 )
 from PySide6.QtCore import Qt, QTimer, QMetaObject, Slot
 import os
@@ -8,20 +8,26 @@ import threading
 import json
 import soundfile as sf
 import numpy as np
+from pydub import AudioSegment
+from pydub.exceptions import CouldntDecodeError
 from scripts.mastering import master_audio
 from scripts.utils import analyze_loudness, get_loudness_hint_for_lang
 from scripts.presets import platform_presets
 from scripts.audio_player_widget import AudioPlayerWidget
 from scripts.recommender import recommend_gain
+from scripts.custom_processing_dialog import CustomSettingsPopup
+from scripts.utils import analyze_loudness, analyze_peak_rms, get_loudness_hint_for_lang
 
 class MasteringApp(QWidget):
     def __init__(self):
         super().__init__()
-        print("🔧 Initializing MasteringApp GUI...")
+        print("\U0001f527 Initializing MasteringApp GUI...")
         self.setWindowTitle("Mastering Tool - Secret Silence")
         self.setMinimumWidth(700)
         self.load_settings()
         self.load_language()
+        self._player_widgets = []
+        self._mastering_thread = None
         self.setup_ui()
         self.original_audio = None
         self.mastered_audio = None
@@ -41,7 +47,7 @@ class MasteringApp(QWidget):
             json.dump(self.settings, f)
 
     def load_language(self):
-        print("🌐 Loading language JSON...")
+        print("\U0001f310 Loading language JSON...")
         with open("lang.json", "r", encoding="utf-8") as f:
             self.lang_data = json.load(f)
         self.current_lang = self.settings.get("lang", "en")
@@ -54,7 +60,6 @@ class MasteringApp(QWidget):
         self.label_select = QLabel(self.tr("select_file"))
         self.entry_file = QLineEdit()
         self.entry_file.setReadOnly(True)
-        self.entry_file.textChanged.connect(self.reset_ui)
         self.button_browse = QPushButton(self.tr("browse"))
         self.button_browse.clicked.connect(self.browse_file)
 
@@ -65,26 +70,18 @@ class MasteringApp(QWidget):
 
         self.label_gain = QLabel(self.tr("gain_label"))
         self.entry_gain = QLineEdit("0.0")
-        self.entry_gain.textChanged.connect(self.reset_ui)
+        self.button_recommend_gain = QPushButton(self.tr("recommend_gain"))
+        self.button_recommend_gain.clicked.connect(self.apply_recommended_gain)
 
         self.cb_eq = QCheckBox(self.tr("eq"))
         self.cb_width = QCheckBox(self.tr("width"))
         self.cb_sat = QCheckBox(self.tr("saturation"))
-        for cb in [self.cb_eq, self.cb_width, self.cb_sat]:
-            cb.stateChanged.connect(self.reset_ui)
 
         self.platform_label = QLabel(self.tr("platform"))
         self.platform_selector = QComboBox()
         self.platform_selector.addItems(platform_presets.keys())
         self.platform_selector.setCurrentText("Spotify")
         self.platform_selector.currentTextChanged.connect(lambda p: setattr(self, "current_platform", p))
-
-        
-        self.label_gain = QLabel(self.tr("gain_label"))
-        self.entry_gain = QLineEdit("0.0")
-        self.entry_gain.textChanged.connect(self.reset_ui)
-        self.button_recommend_gain = QPushButton(self.tr("recommend_gain"))
-        self.button_recommend_gain.clicked.connect(self.apply_recommended_gain)
 
         options_layout = QHBoxLayout()
         options_layout.addWidget(self.label_gain)
@@ -137,6 +134,10 @@ class MasteringApp(QWidget):
         lang_layout.addWidget(QLabel(self.tr("language")))
         lang_layout.addWidget(self.combo_lang)
 
+        self.button_customize = QPushButton("⚙ Customize")
+        self.button_customize.clicked.connect(self.open_custom_popup)
+        lang_layout.addWidget(self.button_customize)
+
         layout = QVBoxLayout()
         layout.addLayout(file_layout)
         layout.addLayout(options_layout)
@@ -151,25 +152,145 @@ class MasteringApp(QWidget):
 
         self.setLayout(layout)
 
+    def open_custom_popup(self):
+        popup = CustomSettingsPopup(lang=self.current_lang)
+        popup.exec()
 
-    def auto_gain(self):
+    def reset_preview_and_threads(self):
+        print("🔁 Resetting previous preview and threads...")
+
+        for preview_widget in [self.original_preview, self.mastered_preview]:
+            layout = preview_widget.layout()
+            for i in reversed(range(layout.count())):
+                widget = layout.itemAt(i).widget()
+                if hasattr(widget, "stop"):
+                    widget.stop()
+                widget.deleteLater()
+
+        self._player_widgets.clear()
+        self.preview_section.hide()
+        self.progress.setValue(0)
+
+        if self._mastering_thread and self._mastering_thread.is_alive():
+            print("⏳ Waiting for previous mastering thread to end...")
+            self._mastering_thread.join(timeout=1.0)
+
+    def set_inputs_enabled(self, enabled):
+        for widget in [self.button_browse, self.entry_gain, self.cb_eq, self.cb_width, self.cb_sat,
+                       self.entry_file, self.button_process, self.platform_selector]:
+            widget.setEnabled(enabled)
+
+    def browse_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, self.tr("select_file"), os.getcwd(), "WAV Files (*.wav)")
+        if file_path:
+            print(f"📁 New file selected: {file_path}")
+            self.entry_file.setText(file_path)
+
+    
+    def process_audio(self):
         file_path = self.entry_file.text()
         if not os.path.isfile(file_path):
-            self.label_status.setText(self.tr("no_file"))
+            QMessageBox.warning(self, "File Error", "The selected file does not exist.")
+            return
+
+        if not file_path.lower().endswith(".wav"):
+            QMessageBox.warning(self, "Unsupported Format", "Only WAV files are supported.")
             return
 
         try:
-            result = recommend_gain(file_path, self.current_platform)
-            gain = result["recommended_gain"]
-            self.entry_gain.setText(f"{gain:.2f}")
-            self.label_status.setText(self.tr("gain_recommended", 
-                                              current=f"{result['current_lufs']:.2f}", 
-                                              target=f"{result['target_lufs']:.2f}"))
-        except Exception as e:
-            print("❌ Auto Gain Error:", e)
-            self.label_status.setText(self.tr("gain_error"))
+            gain = float(self.entry_gain.text())
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Gain", "Please enter a valid number for gain.")
+            return
 
-    
+        use_eq = self.cb_eq.isChecked()
+        use_width = self.cb_width.isChecked()
+        use_sat = self.cb_sat.isChecked()
+        platform = self.current_platform
+
+        print("🟡 Requested to master:", file_path)
+        self.reset_preview_and_threads()
+
+        self.label_status.hide()
+        self.hint_label.hide()
+        self.label_preview.hide()
+        self.preview_section.hide()
+        self.button_save.hide()
+
+        self.progress.setValue(0)
+        self.progress.show()
+        self.label_status.setText(self.tr("processing"))
+        self.label_status.show()
+        self.set_inputs_enabled(False)
+
+        def run_mastering():
+            try:
+                def callback(val):
+                    print(f"📶 Progress: {val}%")
+                    self.progress.setValue(val)
+
+                self.original_audio, self.mastered_audio, self.last_preset = master_audio(
+                    file_path, gain, use_eq, use_width, use_sat, platform, callback
+                )
+                QMetaObject.invokeMethod(self, self.show_preview.__name__, Qt.QueuedConnection)
+
+            except ValueError as ve:
+                QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Error", str(ve)))
+            except CouldntDecodeError:
+                QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Error", "Unable to decode the audio file."))
+            except Exception as e:
+                QTimer.singleShot(0, lambda: QMessageBox.critical(self, "Error", f"An error occurred: {e}"))
+            finally:
+                self.set_inputs_enabled(True)
+
+        self._mastering_thread = threading.Thread(target=run_mastering, daemon=True)
+        self._mastering_thread.start()
+
+    @Slot()
+    def show_preview(self):
+        print("📺 Running show_preview...")
+        self.label_status.setText(self.tr("mastering_complete"))
+
+        # 🔊 Original Audio
+        player1 = AudioPlayerWidget(self.original_audio)
+        original_data = np.array(self.original_audio.get_array_of_samples()).astype(np.float32)
+        if original_data.ndim == 1:
+            original_data = np.stack([original_data, original_data], axis=1)
+        original_peak, original_rms = analyze_peak_rms(original_data)
+        # label_orig_stats = QLabel(f"🔊 Peak: {original_peak:.2f} dB | RMS: {original_rms:.2f} dB")
+
+        # 🔊 Mastered Audio
+        player2 = AudioPlayerWidget(self.mastered_audio)
+        mastered_data = np.array(self.mastered_audio.get_array_of_samples()).astype(np.float32)
+        if mastered_data.ndim == 1:
+            mastered_data = np.stack([mastered_data, mastered_data], axis=1)
+        mastered_peak, mastered_rms = analyze_peak_rms(mastered_data)
+        # label_mast_stats = QLabel(f"🎧 Peak: {mastered_peak:.2f} dB | RMS: {mastered_rms:.2f} dB")
+
+        # 🧠 Loudness Hint
+        loudness = analyze_loudness(mastered_data)
+        target = self.last_preset["target_lufs"]
+        hint = get_loudness_hint_for_lang(loudness, target, self.current_lang)
+        print(f"💡 Hint: {hint}")
+        self.hint_label.setText(f"💡 {hint}")
+        self.hint_label.show()
+
+        # 🧱 Add to Layouts
+        self.original_preview.layout().addWidget(player1)
+        # self.original_preview.layout().addWidget(label_orig_stats)
+
+        self.mastered_preview.layout().addWidget(player2)
+        # self.mastered_preview.layout().addWidget(label_mast_stats)
+
+        self._player_widgets = [player1, player2]
+        self.progress.hide()
+        self.label_preview.show()
+        self.preview_section.show()
+        self.button_save.show()
+        self.set_inputs_enabled(True)
+
+
+
     def apply_recommended_gain(self):
         file_path = self.entry_file.text()
         if not os.path.isfile(file_path):
@@ -181,102 +302,7 @@ class MasteringApp(QWidget):
         self.label_status.setText(
             self.tr("gain_recommended", current=f"{result['current_lufs']:.2f}", target=f"{result['target_lufs']:.2f}")
         )
-
-
-    def reset_ui(self):
-        self.progress.hide()
-        self.label_status.setText("")
-        self.label_preview.hide()
-        self.preview_section.hide()
-        self.button_save.hide()
-        self.hint_label.hide()
-
-    def set_inputs_enabled(self, enabled):
-        for widget in [self.button_browse, self.entry_gain, self.cb_eq, self.cb_width, self.cb_sat,
-                       self.entry_file, self.button_process, self.platform_selector]:
-            widget.setEnabled(enabled)
-
-    def browse_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, self.tr("select_file"), os.getcwd(), "WAV Files (*.wav)")
-        if file_path:
-            self.entry_file.setText(file_path)
-
-    def process_audio(self):
-        file_path = self.entry_file.text()
-        if not os.path.isfile(file_path):
-            self.label_status.setText("Invalid file.")
-            return
-
-        try:
-            gain = float(self.entry_gain.text())
-        except ValueError:
-            self.label_status.setText(self.tr("gain_error"))
-            return
-
-        use_eq = self.cb_eq.isChecked()
-        use_width = self.cb_width.isChecked()
-        use_sat = self.cb_sat.isChecked()
-        platform = self.current_platform
-
-        print("🔄 Starting mastering thread...")
-        self.set_inputs_enabled(False)
-        self.label_status.setText(self.tr("processing"))
-        self.progress.setValue(0)
-        self.progress.show()
-        self.label_preview.hide()
-        self.preview_section.hide()
-        self.button_save.hide()
-        self.hint_label.hide()
-
-        def run_mastering():
-            try:
-                def callback(val):
-                    print(f"📶 Progress: {val}%")
-                    self.progress.setValue(val)
-
-                self.original_audio, self.mastered_audio, self.last_preset = master_audio(
-                    file_path, gain, use_eq, use_width, use_sat, platform, callback
-                )
-                print("✅ Mastering finished. Calling show_preview...")
-                QMetaObject.invokeMethod(self, self.show_preview.__name__, Qt.QueuedConnection)
-
-            except Exception as e:
-                print(f"❌ Error during mastering: {e}")
-                QTimer.singleShot(0, lambda: self.label_status.setText(f"Error: {str(e)}"))
-                self.set_inputs_enabled(True)
-
-        threading.Thread(target=run_mastering).start()
-
-    @Slot()
-    def show_preview(self):
-        print("📺 Running show_preview...")
-        self.label_status.setText(self.tr("mastering_complete"))
-
-        for preview_widget in [self.original_preview, self.mastered_preview]:
-            layout = preview_widget.layout()
-            while layout.count():
-                layout.itemAt(0).widget().deleteLater()
-
-        self.original_preview.layout().addWidget(AudioPlayerWidget(self.original_audio))
-        self.mastered_preview.layout().addWidget(AudioPlayerWidget(self.mastered_audio))
-
-        self.progress.hide()
-        self.label_preview.show()
-        self.preview_section.show()
-        self.button_save.show()
-
-        data = np.array(self.mastered_audio.get_array_of_samples()).astype(np.float32)
-        if data.ndim == 1:
-            data = np.stack([data, data], axis=1)
-        loudness = analyze_loudness(data)
-        target = self.last_preset["target_lufs"]
-        hint = get_loudness_hint_for_lang(loudness, target, self.current_lang)
-        print(f"💡 Hint: {hint}")
-        self.hint_label.setText(f"💡 {hint}")
-        self.hint_label.show()
-
-        self.set_inputs_enabled(True)
-
+    
     def save_output(self):
         if not self.mastered_audio:
             self.label_status.setText(self.tr("no_audio"))
@@ -287,15 +313,46 @@ class MasteringApp(QWidget):
             print(f"💾 Saving mastered audio to: {output_path}")
             self.mastered_audio.export(output_path, format="wav")
 
+            # --- ANALISIS BEFORE/AFTER DENGAN SKALA YANG BENAR ---
             original_data = np.array(self.original_audio.get_array_of_samples()).astype(np.float32)
-            processed_data, _ = sf.read(output_path)
-            before = analyze_loudness(original_data)
-            after = analyze_loudness(processed_data)
+            if np.max(np.abs(original_data)) > 1.5:
+                original_data /= 32768.0
+            if original_data.ndim == 1:
+                original_data = np.stack([original_data, original_data], axis=1)
 
-            print(f"📈 Loudness Before: {before:.2f} dB | After: {after:.2f} dB")
+            processed_data, _ = sf.read(output_path)
+            if processed_data.ndim == 1:
+                processed_data = np.stack([processed_data, processed_data], axis=1)
+
+            # --- Loudness / Peak / RMS ---
+            before_loud = analyze_loudness(original_data)
+            after_loud = analyze_loudness(processed_data)
+            before_peak, before_rms = analyze_peak_rms(original_data)
+            after_peak, after_rms = analyze_peak_rms(processed_data)
+
+            print(f"📈 Loudness Before: {before_loud:.2f} dB | After: {after_loud:.2f} dB")
+
+            # --- Simpan metadata .json ---
+            metadata = {
+                "platform": self.current_platform,
+                "target_lufs": float(self.last_preset["target_lufs"]),
+                "gain_applied": float(self.entry_gain.text()),
+                "loudness_before": float(before_loud),
+                "loudness_after": float(after_loud),
+                "peak_before": float(before_peak),
+                "peak_after": float(after_peak),
+                "rms_before": float(before_rms),
+                "rms_after": float(after_rms)
+            }
+            json_path = output_path.replace(".wav", ".json")
+            with open(json_path, "w") as f:
+                json.dump(metadata, f, indent=4)
+
             self.label_status.setText(
-                self.tr("saved_loudness", before=f"{before:.2f}", after=f"{after:.2f}")
+                self.tr("saved_loudness", before=f"{before_loud:.2f}", after=f"{after_loud:.2f}")
             )
+
+
 
     def change_language(self):
         selected = self.combo_lang.currentText()
