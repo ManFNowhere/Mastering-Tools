@@ -3,31 +3,17 @@ name: Build SS-Mastering
 on:
   push:
     tags:
-      - 'v*'          # trigger on tags like v2.0.0, v2.1.0, etc.
-  workflow_dispatch:  # allow manual trigger from GitHub UI
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
-    name: Build — ${{ matrix.os }}
+    name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            artifact: SS-Mastering-linux
-            archive_cmd: tar -czf SS-Mastering-linux.tar.gz -C dist SS-Mastering
-            archive_file: SS-Mastering-linux.tar.gz
-
-          - os: windows-latest
-            artifact: SS-Mastering-windows
-            archive_cmd: powershell Compress-Archive -Path dist\SS-Mastering -DestinationPath SS-Mastering-windows.zip
-            archive_file: SS-Mastering-windows.zip
-
-          - os: macos-latest
-            artifact: SS-Mastering-macos
-            archive_cmd: zip -r SS-Mastering-macos.zip dist/SS-Mastering.app
-            archive_file: SS-Mastering-macos.zip
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout
@@ -38,13 +24,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install system dependencies (Linux)
+      - name: Install PortAudio (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y libportaudio2 portaudio19-dev
 
-      - name: Install system dependencies (macOS)
+      - name: Install PortAudio (macOS)
         if: runner.os == 'macOS'
         run: brew install portaudio
 
@@ -56,18 +42,42 @@ jobs:
       - name: Build with PyInstaller
         run: python build.py
 
-      - name: Archive build output
-        run: ${{ matrix.archive_cmd }}
-        shell: bash
+      - name: Archive (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf SS-Mastering-linux.tar.gz -C dist SS-Mastering
 
-      - name: Upload artifact
+      - name: Archive (macOS)
+        if: runner.os == 'macOS'
+        run: zip -r SS-Mastering-macos.zip dist/SS-Mastering.app
+
+      - name: Archive (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist\SS-Mastering -DestinationPath SS-Mastering-windows.zip
+        shell: pwsh
+
+      - name: Upload artifact (Linux)
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.archive_file }}
+          name: SS-Mastering-linux
+          path: SS-Mastering-linux.tar.gz
+
+      - name: Upload artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SS-Mastering-macos
+          path: SS-Mastering-macos.zip
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: SS-Mastering-windows
+          path: SS-Mastering-windows.zip
 
   release:
-    name: Create GitHub Release
+    name: Create Release
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
@@ -78,7 +88,7 @@ jobs:
         with:
           path: artifacts/
 
-      - name: Create release with binaries
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: SS-Mastering ${{ github.ref_name }}
