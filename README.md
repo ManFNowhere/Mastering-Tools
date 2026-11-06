@@ -214,9 +214,7 @@ The change takes effect immediately without restarting the app.
 
 ## Building a Standalone App
 
-PyInstaller **cannot cross-compile** — each OS must build its own binary natively.
-
-### Build locally (current OS only)
+PyInstaller **cannot cross-compile** — each OS must build its own binary natively. Run `build.py` on the target machine to produce its native binary.
 
 ```bash
 # Make sure you've run run.py at least once first, then:
@@ -230,20 +228,6 @@ python build.py
 | Linux    | `dist/SS-Mastering/SS-Mastering` |
 
 Always distribute the **entire** `dist/SS-Mastering/` folder (or `.app` on macOS), not the executable file alone.
-
----
-
-### Build for all platforms (GitHub Actions)
-
-Push a version tag and GitHub automatically builds macOS + Windows + Linux in parallel, then publishes them as a release:
-
-```bash
-git tag v2.0.0
-git push origin main
-git push origin v2.0.0
-```
-
-Download the binaries from the **Releases** tab on GitHub. You can also trigger a manual build anytime from **Actions → Build SS-Mastering → Run workflow**.
 
 ---
 
