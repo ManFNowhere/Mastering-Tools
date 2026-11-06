@@ -4,9 +4,10 @@
       "select_file": "Select WAV File",
       "browse": "Browse",
       "gain_label": "Additional Gain (dB)",
-      "eq": "Enable Basic EQ",
+      "eq": "Enable EQ",
       "width": "Stereo Width",
       "saturation": "Saturation",
+      "platform": "Platform:",
       "start": "Start Mastering",
       "save": "Save Mastered",
       "preview": "Preview",
@@ -19,15 +20,20 @@
       "gain_error": "Gain must be a number.",
       "saved_loudness": "Saved! Loudness: Before {before} dB | After {after} dB",
       "auto_gain": "Auto Gain",
-      "gain_recommended": "Recommended gain applied! Current: {current} dB, Target: {target} dB"
+      "gain_recommended": "Recommended gain applied! Current: {current} dB, Target: {target} dB",
+      "file_error": "The selected file does not exist.",
+      "format_error": "Only WAV files are supported.",
+      "stereo_error": "Input file must be stereo (2 channels).",
+      "invalid_gain": "Please enter a valid number for gain."
     },
     "id": {
       "select_file": "Pilih File WAV",
       "browse": "Telusuri",
       "gain_label": "Gain Tambahan (dB)",
-      "eq": "EQ Dasar",
+      "eq": "Aktifkan EQ",
       "width": "Stereo Width",
       "saturation": "Saturasi",
+      "platform": "Platform:",
       "start": "Proses Mastering",
       "save": "Simpan Hasil",
       "preview": "Pratinjau",
@@ -40,6 +46,10 @@
       "gain_error": "Gain harus berupa angka.",
       "saved_loudness": "Tersimpan! Kekerasan suara: Sebelum {before} dB | Sesudah {after} dB",
       "auto_gain": "Rekomendasi Gain",
-      "gain_recommended": "Gain disarankan telah diterapkan! Saat ini: {current} dB, Target: {target} dB"
+      "gain_recommended": "Gain disarankan telah diterapkan! Saat ini: {current} dB, Target: {target} dB",
+      "file_error": "File yang dipilih tidak ditemukan.",
+      "format_error": "Hanya file WAV yang didukung.",
+      "stereo_error": "File input harus stereo (2 channel).",
+      "invalid_gain": "Masukkan angka yang valid untuk gain."
     }
   }
