@@ -10,9 +10,9 @@ builds all three platforms in parallel using native cloud runners.
   CI:      triggered automatically by GitHub Actions on tag push
 
 Outputs:
-  macOS   → dist/SS-Mastering.app
-  Windows → dist/SS-Mastering/SS-Mastering.exe
-  Linux   → dist/SS-Mastering/SS-Mastering
+  macOS   -> dist/SS-Mastering.app
+  Windows -> dist/SS-Mastering/SS-Mastering.exe
+  Linux   -> dist/SS-Mastering/SS-Mastering
 """
 
 import sys
@@ -191,7 +191,7 @@ def main():
     elif system == "Windows":
         out = os.path.join("dist", APP_NAME, f"{APP_NAME}.exe")
         print(f"  Executable : {out}")
-        print(f"  Distribute : zip dist\\{APP_NAME}\\ → SS-Mastering-windows.zip")
+        print(f"  Distribute : zip dist\\{APP_NAME}\\ -> SS-Mastering-windows.zip")
     else:
         out = os.path.join("dist", APP_NAME, APP_NAME)
         print(f"  Executable : {out}")
