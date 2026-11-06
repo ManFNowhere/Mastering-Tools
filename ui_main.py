@@ -1,4 +1,10 @@
 import os, threading, json
+
+# settings.json → user-writable directory (set by main.py before import)
+_SETTINGS_PATH = os.path.join(
+    os.environ.get("SS_USERDATA", os.path.dirname(os.path.abspath(__file__))),
+    "settings.json",
+)
 import numpy as np
 import soundfile as sf
 
@@ -289,16 +295,16 @@ class MasteringApp(QWidget):
     # ── settings / i18n ──────────────────────────────────────
 
     def load_settings(self):
-        if os.path.exists("settings.json"):
-            with open("settings.json", "r", encoding="utf-8") as f:
+        if os.path.exists(_SETTINGS_PATH):
+            with open(_SETTINGS_PATH, "r", encoding="utf-8") as f:
                 self.settings = json.load(f)
         else:
             self.settings = {"lang": "en"}
-            with open("settings.json", "w", encoding="utf-8") as f:
+            with open(_SETTINGS_PATH, "w", encoding="utf-8") as f:
                 json.dump(self.settings, f)
 
     def save_settings(self):
-        with open("settings.json", "w", encoding="utf-8") as f:
+        with open(_SETTINGS_PATH, "w", encoding="utf-8") as f:
             json.dump(self.settings, f)
 
     def load_language(self):

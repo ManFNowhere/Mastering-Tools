@@ -214,14 +214,14 @@ The change takes effect immediately without restarting the app.
 
 ## Building a Standalone App
 
-To package SS-Mastering as a native desktop app (no Python required on the target machine):
+PyInstaller **cannot cross-compile** — each OS must build its own binary natively.
+
+### Build locally (current OS only)
 
 ```bash
 # Make sure you've run run.py at least once first, then:
 python build.py
 ```
-
-Build output by platform:
 
 | Platform | Output |
 |----------|--------|
@@ -229,21 +229,42 @@ Build output by platform:
 | Windows  | `dist/SS-Mastering/SS-Mastering.exe` |
 | Linux    | `dist/SS-Mastering/SS-Mastering` |
 
-**Run the built app:**
+Always distribute the **entire** `dist/SS-Mastering/` folder (or `.app` on macOS), not the executable file alone.
+
+---
+
+### Build for all platforms (GitHub Actions)
+
+Push a version tag and GitHub automatically builds macOS + Windows + Linux in parallel, then publishes them as a release:
 
 ```bash
-# macOS
-open dist/SS-Mastering.app
-
-# Linux
-./dist/SS-Mastering/SS-Mastering
-
-# Windows — double-click dist\SS-Mastering\SS-Mastering.exe
+git tag v2.0.0
+git push origin main
+git push origin v2.0.0
 ```
 
-> PyInstaller builds for the **current OS only**. Run `build.py` on each platform to produce its native binary.
->
-> Always distribute the entire `dist/SS-Mastering/` folder (or `.app` bundle on macOS), not just the executable file alone.
+Download the binaries from the **Releases** tab on GitHub. You can also trigger a manual build anytime from **Actions → Build SS-Mastering → Run workflow**.
+
+---
+
+### macOS — opening the app for the first time
+
+macOS Gatekeeper blocks apps that are not signed with an Apple Developer certificate. Since this is an open-source build, you need to allow it once:
+
+**Option 1 — Right-click method (recommended):**
+1. Right-click `SS-Mastering.app` in Finder
+2. Choose **Open**
+3. In the popup, click **Open** again
+
+**Option 2 — Terminal (after downloading):**
+```bash
+xattr -cr /path/to/SS-Mastering.app
+open /path/to/SS-Mastering.app
+```
+
+`xattr -cr` removes the quarantine flag macOS attaches to downloaded files. You only need to do this once.
+
+> **Why is this needed?** Apple requires a paid Developer ID ($99/year) to sign apps for Gatekeeper auto-approval. Without it, macOS blocks unsigned apps by default. The app itself is safe — you can inspect every line of source code in this repo.
 
 ---
 
@@ -251,21 +272,31 @@ open dist/SS-Mastering.app
 
 ```
 ss-mastering/
-├── main.py                        # Entry point
-├── ui_main.py                     # Main window (MasteringApp)
-├── lang.json                      # UI strings (en / id)
-├── settings.json                  # User preferences (auto-created)
-├── run.py                         # Setup + launcher script
-├── build.py                       # Standalone app builder (PyInstaller)
-├── requirements.txt               # Dependency list
+├── main.py                         # Entry point + path setup for bundled app
+├── ui_main.py                      # Main window (MasteringApp)
+├── lang.json                       # UI strings (en / id)
+├── run.py                          # Setup + launcher script
+├── build.py                        # Standalone app builder (PyInstaller)
+├── requirements.txt                # Dependency list
+├── assets/
+│   ├── check.svg                   # Checkbox checkmark icon
+│   └── arrow-down.svg              # Combobox dropdown arrow
+├── .github/
+│   └── workflows/
+│       └── build.yml               # Multi-platform CI build (GitHub Actions)
 └── scripts/
-    ├── mastering.py               # DSP chain (EQ, width, saturation, limiter, LUFS)
-    ├── presets.py                 # Platform loudness presets
-    ├── utils.py                   # Loudness, peak, RMS analysis
-    ├── recommender.py             # Auto gain recommendation
-    ├── audio_player_widget.py     # Playback widget with waveform
+    ├── mastering.py                # DSP chain (EQ, width, saturation, limiter, LUFS)
+    ├── presets.py                  # Platform loudness presets
+    ├── utils.py                    # Loudness, peak, RMS analysis
+    ├── recommender.py              # Auto gain recommendation
+    ├── comparison_player.py        # Dual-track waveform comparison player
     └── custom_processing_dialog.py # Customize EQ/Width/Saturation sliders
 ```
+
+> `settings.json` is created automatically on first launch and stored at:
+> - **macOS**: `~/Library/Application Support/SS-Mastering/settings.json`
+> - **Windows**: `%APPDATA%\SS-Mastering\settings.json`
+> - **Linux**: `~/.config/SS-Mastering/settings.json`
 
 ---
 

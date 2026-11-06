@@ -1,10 +1,30 @@
 import sys
 import os
+import platform
 
-# When bundled with PyInstaller (--onedir), set CWD to the executable's
-# directory so relative paths (lang.json, settings.json) resolve correctly.
+
+def _user_data_dir():
+    """OS-appropriate directory for user-writable app data (settings.json)."""
+    if platform.system() == "Darwin":
+        return os.path.expanduser("~/Library/Application Support/SS-Mastering")
+    elif platform.system() == "Windows":
+        return os.path.join(
+            os.environ.get("APPDATA", os.path.expanduser("~")), "SS-Mastering"
+        )
+    else:
+        return os.path.expanduser("~/.config/SS-Mastering")
+
+
 if getattr(sys, "frozen", False):
-    os.chdir(os.path.dirname(sys.executable))
+    # Bundled: read-only data files (lang.json, assets) live in sys._MEIPASS
+    os.chdir(sys._MEIPASS)
+    # User-writable data (settings.json) → OS user data directory
+    _ud = _user_data_dir()
+    os.makedirs(_ud, exist_ok=True)
+    os.environ["SS_USERDATA"] = _ud
+else:
+    # Development: everything lives next to main.py
+    os.environ.setdefault("SS_USERDATA", os.path.dirname(os.path.abspath(__file__)))
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont

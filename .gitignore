@@ -4,5 +4,15 @@ testing/
 .git/
 Design/
 Website/
+build/
+dist/
+*.egg-info/
+*.egg
+*.egg-info/
+*.egg
+*.egg-info/
+*.egg
+*.egg-info
+*.spec
 *.pyc
 *.pyo
